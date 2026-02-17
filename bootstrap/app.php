@@ -2,11 +2,14 @@
 
 use App\Http\Middleware\CorrelationIdMiddleware;
 use App\Http\Middleware\JwtAdminAuthMiddleware;
+use App\Http\Responses\ApiResponse;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpKernel\Exception\HttpException;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -20,23 +23,53 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->append(CorrelationIdMiddleware::class);
 
         $middleware->alias([
-            'jwt.admin' => JwtAdminAuthMiddleware::class,
+            'jwt.admin'    => JwtAdminAuthMiddleware::class,
+            'role.super'   => \App\Http\Middleware\RequireSuperAdminMiddleware::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        $exceptions->shouldRenderJsonWhen(function (Request $request) {
-            return $request->is('api/*') || $request->expectsJson();
+        $exceptions->shouldRenderJsonWhen(fn (Request $request) => $request->is('api/*') || $request->expectsJson());
+
+        $exceptions->render(function (ValidationException $e, Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return ApiResponse::validation(
+                    $e->errors(),
+                    $e->getMessage(),
+                );
+            }
         });
 
-        $exceptions->render(function (HttpException $e, Request $request) {
+        $exceptions->render(function (NotFoundHttpException $e, Request $request) {
             if ($request->is('api/*') || $request->expectsJson()) {
-                return response()->json([
-                    'error' => [
-                        'message' => $e->getMessage() ?: 'An error occurred',
-                        'status'  => $e->getStatusCode(),
-                    ],
-                    'correlation_id' => $request->header('X-Correlation-Id'),
-                ], $e->getStatusCode());
+                return ApiResponse::notFound(
+                    $e->getMessage() ?: 'The requested resource was not found.',
+                );
+            }
+        });
+
+        $exceptions->render(function (AccessDeniedHttpException $e, Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                return ApiResponse::forbidden(
+                    $e->getMessage() ?: 'You do not have permission to perform this action.',
+                );
+            }
+        });
+
+        $exceptions->render(function (\Throwable $e, Request $request) {
+            if ($request->is('api/*') || $request->expectsJson()) {
+                $status = method_exists($e, 'getStatusCode') ? $e->getStatusCode() : 500;
+
+                if ($status >= 500) {
+                    return ApiResponse::serverError(
+                        app()->hasDebugModeEnabled() ? $e->getMessage() : 'Internal server error.',
+                    );
+                }
+
+                return ApiResponse::error(
+                    $e->getMessage() ?: 'An error occurred.',
+                    'ERROR',
+                    $status,
+                );
             }
         });
     })->create();
