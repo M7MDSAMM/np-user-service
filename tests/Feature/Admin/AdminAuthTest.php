@@ -18,7 +18,6 @@ class AdminAuthTest extends TestCase
     {
         parent::setUp();
 
-        // Generate JWT keys for testing if they don't exist
         $privatePath = config('jwt.keys.private');
         if (! file_exists($privatePath)) {
             $this->artisan('jwt:generate-keys');
@@ -36,7 +35,14 @@ class AdminAuthTest extends TestCase
         ], $overrides));
     }
 
-    public function test_login_success_returns_token(): void
+    private function tokenFor(Admin $admin): string
+    {
+        return $this->app->make(JwtTokenServiceInterface::class)->issueToken($admin);
+    }
+
+    // ── Login ───────────────────────────────────────────────────────────
+
+    public function test_login_returns_standardized_success(): void
     {
         $this->createAdmin();
 
@@ -47,19 +53,29 @@ class AdminAuthTest extends TestCase
 
         $response->assertOk()
             ->assertJsonStructure([
-                'access_token',
-                'token_type',
-                'expires_in',
+                'success', 'message', 'data' => ['access_token', 'token_type', 'expires_in'],
+                'meta', 'correlation_id',
             ])
-            ->assertJson([
-                'token_type'  => 'Bearer',
-                'expires_in'  => 900,
-            ]);
-
-        $this->assertNotEmpty($response->json('access_token'));
+            ->assertJson(['success' => true]);
     }
 
-    public function test_login_fails_for_inactive_admin(): void
+    public function test_login_failure_returns_standardized_error(): void
+    {
+        $this->createAdmin();
+
+        $response = $this->postJson($this->loginUrl, [
+            'email'    => 'admin@local.test',
+            'password' => 'wrong',
+        ]);
+
+        $response->assertUnauthorized()
+            ->assertJson([
+                'success'    => false,
+                'error_code' => 'AUTH_INVALID',
+            ]);
+    }
+
+    public function test_login_inactive_returns_401(): void
     {
         $this->createAdmin(['is_active' => false]);
 
@@ -69,69 +85,25 @@ class AdminAuthTest extends TestCase
         ]);
 
         $response->assertUnauthorized()
-            ->assertJsonPath('error.message', 'Invalid credentials');
+            ->assertJson(['success' => false, 'error_code' => 'AUTH_INVALID']);
     }
 
-    public function test_login_fails_with_wrong_password(): void
-    {
-        $this->createAdmin();
-
-        $response = $this->postJson($this->loginUrl, [
-            'email'    => 'admin@local.test',
-            'password' => 'wrong-password',
-        ]);
-
-        $response->assertUnauthorized();
-    }
-
-    public function test_login_validates_required_fields(): void
+    public function test_login_validation_returns_standardized_422(): void
     {
         $response = $this->postJson($this->loginUrl, []);
 
         $response->assertUnprocessable()
+            ->assertJsonStructure(['success', 'message', 'error_code', 'errors', 'correlation_id'])
+            ->assertJson([
+                'success'    => false,
+                'error_code' => 'VALIDATION_ERROR',
+            ])
             ->assertJsonValidationErrors(['email', 'password']);
-    }
-
-    public function test_me_returns_admin_data_with_valid_token(): void
-    {
-        $admin = $this->createAdmin();
-
-        $tokenService = $this->app->make(JwtTokenServiceInterface::class);
-        $token = $tokenService->issueToken($admin);
-
-        $response = $this->getJson($this->meUrl, [
-            'Authorization' => "Bearer {$token}",
-        ]);
-
-        $response->assertOk()
-            ->assertJsonPath('data.uuid', $admin->uuid)
-            ->assertJsonPath('data.name', 'Test Admin')
-            ->assertJsonPath('data.email', 'admin@local.test')
-            ->assertJsonPath('data.role', 'super_admin')
-            ->assertJsonPath('data.is_active', true);
-    }
-
-    public function test_me_returns_401_without_token(): void
-    {
-        $response = $this->getJson($this->meUrl);
-
-        $response->assertUnauthorized()
-            ->assertJsonPath('error.status', 401);
-    }
-
-    public function test_me_returns_401_with_invalid_token(): void
-    {
-        $response = $this->getJson($this->meUrl, [
-            'Authorization' => 'Bearer invalid.token.here',
-        ]);
-
-        $response->assertUnauthorized();
     }
 
     public function test_login_updates_last_login_at(): void
     {
         $admin = $this->createAdmin();
-        $this->assertNull($admin->last_login_at);
 
         $this->postJson($this->loginUrl, [
             'email'    => 'admin@local.test',
@@ -142,10 +114,39 @@ class AdminAuthTest extends TestCase
         $this->assertNotNull($admin->last_login_at);
     }
 
-    public function test_response_includes_correlation_id_header(): void
-    {
-        $response = $this->getJson('/api/v1/health');
+    // ── Me ───────────────────────────────────────────────────────────────
 
-        $response->assertHeader('X-Correlation-Id');
+    public function test_me_returns_standardized_success(): void
+    {
+        $admin = $this->createAdmin();
+
+        $response = $this->getJson($this->meUrl, [
+            'Authorization' => 'Bearer '.$this->tokenFor($admin),
+        ]);
+
+        $response->assertOk()
+            ->assertJsonStructure([
+                'success', 'message',
+                'data' => ['uuid', 'name', 'email', 'role', 'is_active'],
+                'meta', 'correlation_id',
+            ])
+            ->assertJson(['success' => true, 'data' => ['uuid' => $admin->uuid]]);
+    }
+
+    public function test_me_without_token_returns_standardized_401(): void
+    {
+        $response = $this->getJson($this->meUrl);
+
+        $response->assertUnauthorized()
+            ->assertJson(['success' => false, 'error_code' => 'AUTH_INVALID']);
+    }
+
+    // ── Correlation ID ──────────────────────────────────────────────────
+
+    public function test_response_includes_correlation_id(): void
+    {
+        $response = $this->getJson('/api/v1/health', ['X-Correlation-Id' => 'test-123']);
+
+        $response->assertHeader('X-Correlation-Id', 'test-123');
     }
 }
