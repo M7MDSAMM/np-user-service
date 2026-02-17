@@ -23,6 +23,23 @@ class EloquentAdminRepository implements AdminRepositoryInterface
             ->first();
     }
 
+    public function create(array $data): Admin
+    {
+        return Admin::create($data);
+    }
+
+    public function update(Admin $admin, array $data): Admin
+    {
+        $admin->update($data);
+
+        return $admin->fresh();
+    }
+
+    public function delete(Admin $admin): bool
+    {
+        return (bool) $admin->delete();
+    }
+
     public function updateLastLogin(Admin $admin): void
     {
         $admin->update(['last_login_at' => now()]);

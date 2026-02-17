@@ -8,5 +8,11 @@ interface AdminRepositoryInterface
 
     public function findActiveByUuid(string $uuid): ?Admin;
 
+    public function create(array $data): Admin;
+
+    public function update(Admin $admin, array $data): Admin;
+
+    public function delete(Admin $admin): bool;
+
     public function updateLastLogin(Admin $admin): void;
 }

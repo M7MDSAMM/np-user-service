@@ -24,8 +24,14 @@ class Admin extends Model
     ];
 
     protected $hidden = [
+        'id',
         'password',
     ];
+
+    public function getRouteKeyName(): string
+    {
+        return 'uuid';
+    }
 
     protected function casts(): array
     {
