@@ -14,6 +14,11 @@ class RecipientUser extends Model
 
     protected $table = 'recipient_users';
 
+    protected $attributes = [
+        'is_active' => true,
+        'locale'    => 'en',
+    ];
+
     protected $fillable = [
         'uuid',
         'name',

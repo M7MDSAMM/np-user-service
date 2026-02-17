@@ -13,6 +13,11 @@ class UserDevice extends Model
 
     protected $table = 'user_devices';
 
+    protected $attributes = [
+        'is_active' => true,
+        'provider'  => 'fcm',
+    ];
+
     protected $fillable = [
         'uuid',
         'user_id',

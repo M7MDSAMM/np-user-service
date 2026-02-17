@@ -10,7 +10,7 @@ class UserPreferenceService implements UserPreferenceServiceInterface
 {
     public function get(RecipientUser $user): UserNotificationPreference
     {
-        return $user->preferences ?? $user->preferences()->create([]);
+        return $user->preferences ?? $this->createDefaults($user);
     }
 
     public function upsert(RecipientUser $user, array $data): UserNotificationPreference
@@ -23,6 +23,18 @@ class UserPreferenceService implements UserPreferenceServiceInterface
             return $prefs->fresh();
         }
 
-        return $user->preferences()->create($data);
+        return $this->createDefaults($user, $data);
+    }
+
+    private function createDefaults(RecipientUser $user, array $overrides = []): UserNotificationPreference
+    {
+        $defaults = [
+            'channel_email'        => true,
+            'channel_whatsapp'     => false,
+            'channel_push'         => false,
+            'rate_limit_per_minute' => 5,
+        ];
+
+        return $user->preferences()->create(array_merge($defaults, $overrides));
     }
 }
