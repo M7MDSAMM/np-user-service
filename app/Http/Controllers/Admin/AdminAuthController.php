@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Application\Auth\AdminAuthService;
 use App\Http\Requests\Admin\LoginRequest;
+use App\Http\Responses\ApiResponse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -21,40 +22,30 @@ class AdminAuthController
         );
 
         if (! $result) {
-            return response()->json([
-                'error' => [
-                    'message' => 'Invalid credentials',
-                    'status'  => 401,
-                ],
-                'correlation_id' => $request->header('X-Correlation-Id'),
-            ], 401);
+            return ApiResponse::unauthorized('Invalid credentials.', 'AUTH_INVALID');
         }
 
-        return response()->json($result);
+        return ApiResponse::success($result, 'Login successful.');
     }
 
     public function me(Request $request): JsonResponse
     {
-        $admin = $this->authService->resolveAdmin($request->attributes->get('auth_admin_uuid'));
+        $admin = $this->authService->resolveAdmin(
+            $request->attributes->get('auth_admin_uuid'),
+        );
 
         if (! $admin) {
-            return response()->json([
-                'error' => [
-                    'message' => 'Admin not found',
-                    'status'  => 404,
-                ],
-                'correlation_id' => $request->header('X-Correlation-Id'),
-            ], 404);
+            return ApiResponse::notFound('Admin not found.');
         }
 
-        return response()->json([
-            'data' => [
-                'uuid'      => $admin->uuid,
-                'name'      => $admin->name,
-                'email'     => $admin->email,
-                'role'      => $admin->role,
-                'is_active' => $admin->is_active,
-            ],
-        ]);
+        return ApiResponse::success([
+            'uuid'          => $admin->uuid,
+            'name'          => $admin->name,
+            'email'         => $admin->email,
+            'role'          => $admin->role,
+            'is_active'     => $admin->is_active,
+            'last_login_at' => $admin->last_login_at?->toIso8601String(),
+            'created_at'    => $admin->created_at?->toIso8601String(),
+        ], 'Admin profile retrieved.');
     }
 }
