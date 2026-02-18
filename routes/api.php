@@ -20,14 +20,11 @@ use Illuminate\Support\Facades\Route;
 Route::get('/health', function () {
     $version = env('APP_VERSION') ?: trim((string) shell_exec('git rev-parse --short HEAD')) ?: 'unknown';
 
-    return response()->json([
-        'success' => true,
-        'data'    => [
-            'service'   => 'user-service',
-            'status'    => 'ok',
-            'timestamp' => now()->toIso8601String(),
-            'version'   => $version,
-        ],
+    return \App\Http\Responses\ApiResponse::success([
+        'service'   => 'user-service',
+        'status'    => 'ok',
+        'timestamp' => now()->toIso8601String(),
+        'version'   => $version,
     ]);
 });
 

@@ -57,6 +57,7 @@ final class ApiResponse
             'message'        => $message,
             'error_code'     => $errorCode,
             'correlation_id' => request()->header('X-Correlation-Id', ''),
+            'meta'           => (object) [],
         ];
 
         if ($errors) {
