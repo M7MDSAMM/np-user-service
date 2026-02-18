@@ -17,10 +17,19 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::get('/health', fn () => response()->json([
-    'success' => true,
-    'data'    => ['service' => 'user-service', 'status' => 'ok'],
-]));
+Route::get('/health', function () {
+    $version = env('APP_VERSION') ?: trim((string) shell_exec('git rev-parse --short HEAD')) ?: 'unknown';
+
+    return response()->json([
+        'success' => true,
+        'data'    => [
+            'service'   => 'user-service',
+            'status'    => 'ok',
+            'timestamp' => now()->toIso8601String(),
+            'version'   => $version,
+        ],
+    ]);
+});
 
 // ── Admin Authentication ────────────────────────────────────────────────
 Route::prefix('admin')->group(function () {
