@@ -5,6 +5,7 @@ namespace App\Infrastructure\Auth;
 use App\Domain\Admin\Admin;
 use App\Domain\Auth\InvalidTokenException;
 use App\Domain\Auth\JwtTokenServiceInterface;
+use Firebase\JWT\ExpiredException;
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 use Illuminate\Support\Str;
@@ -69,6 +70,8 @@ class Rs256JwtTokenService implements JwtTokenServiceInterface
             return $claims;
         } catch (InvalidTokenException $e) {
             throw $e;
+        } catch (ExpiredException $e) {
+            throw new InvalidTokenException('Token expired', 0, $e);
         } catch (\Throwable $e) {
             throw new InvalidTokenException('Token validation failed: '.$e->getMessage(), 0, $e);
         }
