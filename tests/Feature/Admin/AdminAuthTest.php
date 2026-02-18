@@ -141,6 +141,29 @@ class AdminAuthTest extends TestCase
             ->assertJson(['success' => false, 'error_code' => 'AUTH_INVALID']);
     }
 
+    public function test_me_with_expired_token_returns_standardized_401(): void
+    {
+        $admin = $this->createAdmin();
+
+        // Make the issued token already expired
+        config(['jwt.ttl' => -60]);
+
+        $token = $this->tokenFor($admin);
+
+        $response = $this->getJson($this->meUrl, [
+            'Authorization'    => 'Bearer '.$token,
+            'X-Correlation-Id' => 'expired-123',
+        ]);
+
+        $response->assertUnauthorized()
+            ->assertJson([
+                'success'        => false,
+                'error_code'     => 'TOKEN_EXPIRED',
+                'correlation_id' => 'expired-123',
+                'message'        => 'Token expired',
+            ]);
+    }
+
     // ── Correlation ID ──────────────────────────────────────────────────
 
     public function test_response_includes_correlation_id(): void
