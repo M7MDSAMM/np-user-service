@@ -49,10 +49,10 @@ Route::prefix('admins')->middleware(['jwt.admin', 'role.super'])->group(function
 
 // ── Recipient User Management (any admin) ────────────────────────────────
 Route::prefix('users')->middleware('jwt.admin')->group(function () {
-    Route::get('/', [UsersController::class, 'index']);
+    Route::get('/', action: [UsersController::class, 'index']);
     Route::post('/', [UsersController::class, 'store']);
     Route::get('/{user}', [UsersController::class, 'show']);
-    Route::put('/{user}', [UsersController::class, 'update']);
+    Route::put('/{user}', action: [UsersController::class, 'update']);
     Route::delete('/{user}', [UsersController::class, 'destroy']);
 
     // Preferences
