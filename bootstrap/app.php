@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\CorrelationIdMiddleware;
 use App\Http\Middleware\JwtAdminAuthMiddleware;
+use App\Http\Middleware\RequestTimingMiddleware;
 use App\Http\Responses\ApiResponse;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -21,6 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->append(CorrelationIdMiddleware::class);
+        $middleware->append(RequestTimingMiddleware::class);
 
         $middleware->alias([
             'jwt.admin'    => JwtAdminAuthMiddleware::class,

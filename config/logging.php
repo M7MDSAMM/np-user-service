@@ -1,5 +1,6 @@
 <?php
 
+use Monolog\Formatter\JsonFormatter;
 use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
@@ -54,15 +55,24 @@ return [
 
         'stack' => [
             'driver' => 'stack',
-            'channels' => explode(',', (string) env('LOG_STACK', 'single')),
+            'channels' => explode(',', (string) env('LOG_STACK', 'structured')),
             'ignore_exceptions' => false,
         ],
 
-        'single' => [
-            'driver' => 'single',
-            'path' => storage_path('logs/laravel.log'),
+        'structured' => [
+            'driver' => 'monolog',
             'level' => env('LOG_LEVEL', 'debug'),
-            'replace_placeholders' => true,
+            'handler' => StreamHandler::class,
+            'with' => [
+                'stream' => storage_path('logs/app.log'),
+            ],
+            'formatter' => JsonFormatter::class,
+            'formatter_with' => [
+                'batch_mode' => JsonFormatter::BATCH_MODE_JSON,
+                'append_newline' => true,
+            ],
+            'processors' => [PsrLogMessageProcessor::class],
+            'tap' => [\App\Logging\AddCommonContext::class],
         ],
 
         'daily' => [
