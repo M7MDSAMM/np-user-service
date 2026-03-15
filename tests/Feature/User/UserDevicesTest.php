@@ -2,44 +2,15 @@
 
 namespace Tests\Feature\User;
 
-use App\Domain\Admin\Admin;
-use App\Domain\Auth\JwtTokenServiceInterface;
 use App\Domain\User\RecipientUser;
-use App\Domain\User\UserDevice;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\AssertsApiEnvelope;
+use Tests\Support\JwtHelper;
 use Tests\TestCase;
 
 class UserDevicesTest extends TestCase
 {
-    use RefreshDatabase;
-
-    private ?Admin $admin = null;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        if (! file_exists(config('jwt.keys.private'))) {
-            $this->artisan('jwt:generate-keys');
-        }
-    }
-
-    private function authHeaders(): array
-    {
-        if (! $this->admin) {
-            $this->admin = Admin::create([
-                'name'      => 'Super Admin',
-                'email'     => 'super@local.test',
-                'password'  => 'Admin12345!',
-                'role'      => 'super_admin',
-                'is_active' => true,
-            ]);
-        }
-
-        $token = $this->app->make(JwtTokenServiceInterface::class)->issueToken($this->admin);
-
-        return ['Authorization' => 'Bearer ' . $token];
-    }
+    use RefreshDatabase, JwtHelper, AssertsApiEnvelope;
 
     private function createUser(): RecipientUser
     {
@@ -58,16 +29,15 @@ class UserDevicesTest extends TestCase
             'platform' => 'android',
         ], $this->authHeaders());
 
-        $response->assertCreated()
-            ->assertJsonStructure([
-                'data' => ['uuid', 'provider', 'token', 'platform', 'is_active'],
-            ])
+        $this->assertApiSuccess($response, 201);
+        $response->assertJsonStructure([
+            'data' => ['uuid', 'provider', 'token', 'platform', 'is_active'],
+        ])
             ->assertJson([
-                'success' => true,
-                'data'    => [
-                    'token'    => 'fcm-token-abc123',
-                    'provider' => 'fcm',
-                    'platform' => 'android',
+                'data' => [
+                    'token'     => 'fcm-token-abc123',
+                    'provider'  => 'fcm',
+                    'platform'  => 'android',
                     'is_active' => true,
                 ],
             ]);
@@ -83,9 +53,7 @@ class UserDevicesTest extends TestCase
 
         $response = $this->getJson("/api/v1/users/{$user->uuid}/devices", $this->authHeaders());
 
-        $response->assertOk()
-            ->assertJson(['success' => true]);
-
+        $this->assertApiSuccess($response);
         $this->assertCount(2, $response->json('data'));
     }
 
@@ -100,9 +68,7 @@ class UserDevicesTest extends TestCase
             $this->authHeaders(),
         );
 
-        $response->assertOk()
-            ->assertJson(['success' => true]);
-
+        $this->assertApiSuccess($response);
         $this->assertSoftDeleted('user_devices', ['uuid' => $device->uuid]);
     }
 
@@ -148,5 +114,22 @@ class UserDevicesTest extends TestCase
             $this->assertArrayNotHasKey('id', $device);
             $this->assertArrayNotHasKey('user_id', $device);
         }
+    }
+
+    public function test_add_device_validation_requires_token_and_platform(): void
+    {
+        $user = $this->createUser();
+
+        $response = $this->postJson("/api/v1/users/{$user->uuid}/devices", [], $this->authHeaders());
+
+        $this->assertApiError($response, 422, 'VALIDATION_ERROR');
+        $response->assertJsonValidationErrors(['token']);
+    }
+
+    public function test_devices_for_nonexistent_user_returns_404(): void
+    {
+        $response = $this->getJson('/api/v1/users/nonexistent-uuid/devices', $this->authHeaders());
+
+        $this->assertApiError($response, 404, 'NOT_FOUND');
     }
 }

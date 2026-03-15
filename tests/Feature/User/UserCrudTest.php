@@ -2,45 +2,17 @@
 
 namespace Tests\Feature\User;
 
-use App\Domain\Admin\Admin;
-use App\Domain\Auth\JwtTokenServiceInterface;
 use App\Domain\User\RecipientUser;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\Support\AssertsApiEnvelope;
+use Tests\Support\JwtHelper;
 use Tests\TestCase;
 
 class UserCrudTest extends TestCase
 {
-    use RefreshDatabase;
+    use RefreshDatabase, JwtHelper, AssertsApiEnvelope;
 
     private string $baseUrl = '/api/v1/users';
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        if (! file_exists(config('jwt.keys.private'))) {
-            $this->artisan('jwt:generate-keys');
-        }
-    }
-
-    private function createAdmin(array $overrides = []): Admin
-    {
-        return Admin::create(array_merge([
-            'name'      => 'Super Admin',
-            'email'     => 'super@local.test',
-            'password'  => 'Admin12345!',
-            'role'      => 'super_admin',
-            'is_active' => true,
-        ], $overrides));
-    }
-
-    private function authHeaders(?Admin $admin = null): array
-    {
-        $admin ??= $this->createAdmin();
-        $token = $this->app->make(JwtTokenServiceInterface::class)->issueToken($admin);
-
-        return ['Authorization' => 'Bearer ' . $token];
-    }
 
     private function createUser(array $overrides = []): RecipientUser
     {
@@ -56,8 +28,7 @@ class UserCrudTest extends TestCase
     {
         $response = $this->getJson($this->baseUrl);
 
-        $response->assertUnauthorized()
-            ->assertJson(['success' => false, 'error_code' => 'AUTH_INVALID']);
+        $this->assertApiError($response, 401, 'AUTH_INVALID');
     }
 
     public function test_admin_can_access_user_endpoints(): void
@@ -66,8 +37,7 @@ class UserCrudTest extends TestCase
 
         $response = $this->getJson($this->baseUrl, $this->authHeaders($admin));
 
-        $response->assertOk()
-            ->assertJson(['success' => true]);
+        $this->assertApiSuccess($response);
     }
 
     // ── Create ──────────────────────────────────────────────────────────
@@ -82,15 +52,12 @@ class UserCrudTest extends TestCase
             'timezone'   => 'Asia/Riyadh',
         ], $this->authHeaders());
 
-        $response->assertCreated()
-            ->assertJsonStructure([
-                'success', 'message',
-                'data' => ['uuid', 'name', 'email', 'phone_e164', 'locale', 'timezone', 'is_active'],
-                'correlation_id',
-            ])
+        $this->assertApiSuccess($response, 201);
+        $response->assertJsonStructure([
+            'data' => ['uuid', 'name', 'email', 'phone_e164', 'locale', 'timezone', 'is_active'],
+        ])
             ->assertJson([
-                'success' => true,
-                'data'    => [
+                'data' => [
                     'name'       => 'Jane Doe',
                     'email'      => 'jane@example.test',
                     'phone_e164' => '+1234567890',
@@ -112,9 +79,8 @@ class UserCrudTest extends TestCase
             'email' => 'existing@example.test',
         ], $this->authHeaders());
 
-        $response->assertUnprocessable()
-            ->assertJson(['success' => false, 'error_code' => 'VALIDATION_ERROR'])
-            ->assertJsonValidationErrors(['email']);
+        $this->assertApiError($response, 422, 'VALIDATION_ERROR');
+        $response->assertJsonValidationErrors(['email']);
     }
 
     public function test_create_validation_fails_for_invalid_phone(): void
@@ -129,6 +95,17 @@ class UserCrudTest extends TestCase
             ->assertJsonValidationErrors(['phone_e164']);
     }
 
+    public function test_create_with_minimal_fields(): void
+    {
+        $response = $this->postJson($this->baseUrl, [
+            'name'  => 'Minimal',
+            'email' => 'minimal@example.test',
+        ], $this->authHeaders());
+
+        $this->assertApiSuccess($response, 201);
+        $response->assertJsonPath('data.name', 'Minimal');
+    }
+
     // ── Show ────────────────────────────────────────────────────────────
 
     public function test_admin_can_show_user(): void
@@ -137,19 +114,17 @@ class UserCrudTest extends TestCase
 
         $response = $this->getJson("{$this->baseUrl}/{$user->uuid}", $this->authHeaders());
 
-        $response->assertOk()
-            ->assertJson([
-                'success' => true,
-                'data'    => ['uuid' => $user->uuid, 'name' => 'John Doe'],
-            ]);
+        $this->assertApiSuccess($response);
+        $response->assertJson([
+            'data' => ['uuid' => $user->uuid, 'name' => 'John Doe'],
+        ]);
     }
 
     public function test_show_nonexistent_returns_404(): void
     {
         $response = $this->getJson("{$this->baseUrl}/nonexistent-uuid", $this->authHeaders());
 
-        $response->assertNotFound()
-            ->assertJson(['success' => false, 'error_code' => 'NOT_FOUND']);
+        $this->assertApiError($response, 404, 'NOT_FOUND');
     }
 
     // ── Update ──────────────────────────────────────────────────────────
@@ -163,11 +138,8 @@ class UserCrudTest extends TestCase
             'email' => 'john@example.test',
         ], $this->authHeaders());
 
-        $response->assertOk()
-            ->assertJson([
-                'success' => true,
-                'data'    => ['name' => 'Updated Name'],
-            ]);
+        $this->assertApiSuccess($response);
+        $response->assertJsonPath('data.name', 'Updated Name');
     }
 
     // ── Delete ──────────────────────────────────────────────────────────
@@ -178,9 +150,7 @@ class UserCrudTest extends TestCase
 
         $response = $this->deleteJson("{$this->baseUrl}/{$user->uuid}", [], $this->authHeaders());
 
-        $response->assertOk()
-            ->assertJson(['success' => true]);
-
+        $this->assertApiSuccess($response);
         $this->assertSoftDeleted('recipient_users', ['uuid' => $user->uuid]);
     }
 
@@ -193,11 +163,10 @@ class UserCrudTest extends TestCase
 
         $response = $this->getJson("{$this->baseUrl}?per_page=1", $this->authHeaders());
 
-        $response->assertOk()
-            ->assertJsonStructure([
-                'success', 'data',
-                'meta' => ['pagination' => ['page', 'per_page', 'total', 'last_page']],
-            ])
+        $this->assertApiSuccess($response);
+        $response->assertJsonStructure([
+            'meta' => ['pagination' => ['page', 'per_page', 'total', 'last_page']],
+        ])
             ->assertJson([
                 'meta' => ['pagination' => ['per_page' => 1, 'total' => 2, 'last_page' => 2]],
             ]);
