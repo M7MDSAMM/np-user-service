@@ -16,8 +16,11 @@ class HealthTest extends TestCase
 
         $response->assertJsonPath('success', true);
         $response->assertJsonPath('data.service', 'user-service');
+        $response->assertJsonPath('data.status', 'healthy');
         $response->assertJsonPath('meta', []);
         $this->assertArrayHasKey('version', $response->json('data'));
+        $this->assertArrayHasKey('environment', $response->json('data'));
+        $this->assertArrayHasKey('timestamp', $response->json('data'));
     }
 
     public function test_unauthorized_envelope_has_standard_shape(): void
