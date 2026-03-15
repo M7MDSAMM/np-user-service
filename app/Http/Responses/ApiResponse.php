@@ -52,19 +52,14 @@ final class ApiResponse
         int $status = 400,
         array $errors = [],
     ): JsonResponse {
-        $payload = [
+        return response()->json([
             'success'        => false,
             'message'        => $message,
+            'errors'         => $errors ?: (object) [],
             'error_code'     => $errorCode,
             'correlation_id' => request()->header('X-Correlation-Id', ''),
             'meta'           => (object) [],
-        ];
-
-        if ($errors) {
-            $payload['errors'] = $errors;
-        }
-
-        return response()->json($payload, $status);
+        ], $status);
     }
 
     public static function unauthorized(string $message = 'Unauthorized.', string $errorCode = 'AUTH_INVALID'): JsonResponse

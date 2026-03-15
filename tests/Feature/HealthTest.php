@@ -6,26 +6,29 @@ use Tests\TestCase;
 
 class HealthTest extends TestCase
 {
-    public function test_health_returns_correlation_id_and_version(): void
+    public function test_health_returns_standardized_success_envelope(): void
     {
-        $response = $this->get('/api/v1/health');
+        $response = $this->getJson('/api/v1/health');
 
         $response->assertOk();
-        $cid = $response->headers->get('X-Correlation-Id');
-        $this->assertNotEmpty($cid);
+        $this->assertNotEmpty($response->headers->get('X-Correlation-Id'));
 
         $response->assertJsonPath('success', true);
         $response->assertJsonPath('data.service', 'user-service');
         $response->assertJsonPath('data.status', 'healthy');
-        $response->assertJsonPath('meta', []);
-        $this->assertArrayHasKey('version', $response->json('data'));
-        $this->assertArrayHasKey('environment', $response->json('data'));
-        $this->assertArrayHasKey('timestamp', $response->json('data'));
+
+        $json = $response->json();
+        $this->assertArrayHasKey('message', $json);
+        $this->assertArrayHasKey('meta', $json);
+        $this->assertArrayHasKey('correlation_id', $json);
+        $this->assertArrayHasKey('version', $json['data']);
+        $this->assertArrayHasKey('environment', $json['data']);
+        $this->assertArrayHasKey('timestamp', $json['data']);
     }
 
     public function test_unauthorized_envelope_has_standard_shape(): void
     {
-        $response = $this->get('/api/v1/admin/me');
+        $response = $this->getJson('/api/v1/admin/me');
 
         $response->assertUnauthorized();
         $response->assertJson([
@@ -35,8 +38,23 @@ class HealthTest extends TestCase
 
         $json = $response->json();
         $this->assertArrayHasKey('message', $json);
+        $this->assertArrayHasKey('errors', $json);
         $this->assertArrayHasKey('correlation_id', $json);
         $this->assertArrayHasKey('meta', $json);
-        $this->assertIsArray($json['meta'] ?? []);
+    }
+
+    public function test_not_found_returns_standardized_error_envelope(): void
+    {
+        $response = $this->getJson('/api/v1/users/nonexistent-uuid');
+
+        $response->assertNotFound();
+
+        $json = $response->json();
+        $this->assertFalse($json['success']);
+        $this->assertSame('NOT_FOUND', $json['error_code']);
+        $this->assertArrayHasKey('message', $json);
+        $this->assertArrayHasKey('errors', $json);
+        $this->assertArrayHasKey('correlation_id', $json);
+        $this->assertArrayHasKey('meta', $json);
     }
 }
